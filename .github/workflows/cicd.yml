@@ -1,0 +1,97 @@
+name: CI/CD
+on:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  security-events: write
+jobs:
+  # ------- Linting -------
+  golangci:
+    name: GO Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: './go.mod'
+          cache: 'true'
+
+      - name: golangCi-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
+        with:
+          version: latest
+          args: --timeout=5m
+
+  # ------- Security -------
+  security:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create SARIF Directory
+        run: mkdir -p sarif-reports
+
+      - name: Run Trivy
+        run: |
+          mkdir -p sarif-reports
+          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:0.70.0 \
+            fs --ignore-unfixed --format sarif --severity HIGH,CRITICAL \
+            -o sarif-reports/trivy-results.sarif .
+
+      - name: GoSec Security Scan
+        uses: securego/gosec@4a3bd8af174872c778439083ded7adbf3747e770
+        with:
+          args: ' -no-fail -fmt sarif -out sarif-reports/go-results.sarif ./...'
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@a2d9de63c2916881d0621fdb7e65abe32141606d
+        with:
+          sarif_file: sarif-reports
+
+  # ------- Testing -------
+  test:
+    name: Tests And Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: './go.mod'
+          cache: 'true'
+
+      - name: Run Tests and Generate Coverage
+        run: go test -json -coverprofile=coverage.out -covermode=atomic ./... | tee test-report.json
+
+      - name: Generate Code Coverage Report
+        shell: bash
+        run: |
+          cov=$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')
+          echo "$cov" >> coverage.txt
+          echo "Coverage: $cov"
+
+        #TODO: Add coverage badge to README.md
+      - name: Upload Code Coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: coverage.txt
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload Test Report
+        uses: dorny/test-reporter@b082adf0eced0765477756c2a610396589b8c637
+        if: ${{ !cancelled() }}
+        with:
+          name: Go Test Report
+          path: test-report.json
+          reporter: golang-json
