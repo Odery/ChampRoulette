@@ -1,0 +1,57 @@
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Go build output
+*.o
+*.a
+*.test
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# GoLand IDE specific
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE and editor specific
+.vscode/
+.vim/
+
+# OS specific
+Thumbs.db
+
+# Build output directories
+bin/
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Environment files
+.env
+.env.local
+
+# Log files
+*.log
+
+# Test coverage
+*.cover
+coverage.out
+
