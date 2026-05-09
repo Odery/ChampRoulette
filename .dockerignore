@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub Actions / repo metadata
+.github
+
+# Docs (not needed in image)
+*.md
+LICENSE
+
+# Docker
+Dockerfile
+.dockerignore
+compose.yaml
+docker-compose.yml
+docker-compose.yaml
+
+# Editor / OS cruft
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build outputs
+bin/
+dist/
+out/
+*.exe
+
+# Go vendoring (we use modules)
+vendor/
+
+# Test artifacts
+coverage.out
+*.test
