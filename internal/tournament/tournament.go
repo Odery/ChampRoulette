@@ -11,6 +11,8 @@
 //     never drafted twice in the same tournament.
 //   - "Real tournament" pairings: winner of slot 2k always plays winner
 //     of slot 2k+1 in the next round.
+//   - Sequential mode is a frontend-enforced flag (server stores it but
+//     does not gate match ordering at the engine layer).
 package tournament
 
 import (
@@ -63,17 +65,17 @@ type Round struct {
 // usedChamps stays server-side; the frontend only needs the per-match
 // drafts and the Data Dragon version for icon URLs.
 type State struct {
-	Players    []string        `json:"players"`
-	Rounds     []*Round        `json:"rounds"`
-	Champion   string          `json:"champion,omitempty"`
-	Done       bool            `json:"done"`
-	Version    string          `json:"version"`
-	usedChamps map[string]bool `json:"-"`
+	Players     []string        `json:"players"`
+	Rounds      []*Round        `json:"rounds"`
+	Champion    string          `json:"champion,omitempty"`
+	Done        bool            `json:"done"`
+	Version     string          `json:"version"`
+	Sequential  bool            `json:"sequential"`
+	BracketSize int             `json:"bracketSize"`
+	usedChamps  map[string]bool `json:"-"`
 }
 
-// Engine creates and mutates States. It is stateless aside from the
-// shared champion pool and is safe to share; serialization of access to
-// any individual State is the caller's responsibility.
+// Engine creates and mutates States.
 type Engine struct {
 	pool *champions.Pool
 }
@@ -84,17 +86,20 @@ func NewEngine(pool *champions.Pool) *Engine {
 }
 
 // New starts a fresh tournament with the given player names. Names are
-// trimmed; empty entries are dropped before validation.
-func (e *Engine) New(players []string) (*State, error) {
+// trimmed; empty entries are dropped before validation. The sequential
+// flag is recorded on the state for the frontend to enforce.
+func (e *Engine) New(players []string, sequential bool) (*State, error) {
 	cleaned, err := validatePlayers(players)
 	if err != nil {
 		return nil, err
 	}
 	s := &State{
-		Players:    cleaned,
-		Rounds:     []*Round{},
-		Version:    e.pool.Version,
-		usedChamps: map[string]bool{},
+		Players:     cleaned,
+		Rounds:      []*Round{},
+		Version:     e.pool.Version,
+		Sequential:  sequential,
+		BracketSize: nextPowerOf2(len(cleaned)),
+		usedChamps:  map[string]bool{},
 	}
 	if err := e.startFirstRound(s); err != nil {
 		return nil, err
@@ -134,12 +139,9 @@ func (e *Engine) Report(s *State, matchID, winner string) error {
 	return nil
 }
 
-// startFirstRound builds the initial bracket: shuffle players into a
-// power-of-two slot table, then collapse adjacent slots into matches,
-// with a random subset of pairs becoming byes.
 func (e *Engine) startFirstRound(s *State) error {
 	n := len(s.Players)
-	bracketSize := nextPowerOf2(n)
+	bracketSize := s.BracketSize
 	pairs := bracketSize / 2
 	byes := bracketSize - n
 
@@ -181,9 +183,6 @@ func (e *Engine) startFirstRound(s *State) error {
 	return nil
 }
 
-// advance is called once the current round is fully decided. It either
-// crowns a champion (if a single winner remains) or creates the next
-// round by pairing winners 0&1, 2&3, … and drafting champions for them.
 func (e *Engine) advance(s *State) error {
 	cur := s.Rounds[len(s.Rounds)-1]
 	winners := make([]string, len(cur.Matches))
@@ -211,9 +210,6 @@ func (e *Engine) advance(s *State) error {
 	return nil
 }
 
-// draftRound assigns one champion per player for every non-bye match in
-// the round, drawing from the pool of champions not yet used in this
-// tournament. Champions never repeat — within the round or across rounds.
 func (e *Engine) draftRound(s *State, r *Round) error {
 	needed := 0
 	for _, m := range r.Matches {

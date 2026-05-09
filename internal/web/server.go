@@ -48,7 +48,8 @@ func NewApp(pool *champions.Pool, staticDir string) *fiber.App {
 }
 
 type startReq struct {
-	Players []string `json:"players"`
+	Players    []string `json:"players"`
+	Sequential bool     `json:"sequential"`
 }
 
 type resultReq struct {
@@ -73,13 +74,18 @@ func (s *Server) createTournament(c *fiber.Ctx) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st, err := s.engine.New(req.Players)
+	st, err := s.engine.New(req.Players, req.Sequential)
 	if err != nil {
 		slog.Warn("create tournament rejected", "err", err, "submitted", len(req.Players))
 		return c.Status(fiber.StatusBadRequest).JSON(errResp{Error: err.Error()})
 	}
 	s.state = st
-	slog.Info("tournament created", "players", len(st.Players), "rounds", len(st.Rounds))
+	slog.Info("tournament created",
+		"players", len(st.Players),
+		"rounds", len(st.Rounds),
+		"sequential", st.Sequential,
+		"bracketSize", st.BracketSize,
+	)
 	return c.JSON(fiber.Map{"state": st})
 }
 
