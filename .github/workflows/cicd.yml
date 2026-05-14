@@ -53,7 +53,7 @@ jobs:
           args: ' -no-fail -fmt sarif -out sarif-reports/go-results.sarif ./...'
 
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@a2d9de63c2916881d0621fdb7e65abe32141606d
+        uses: github/codeql-action/upload-sarif@ea37b337cdd7576e8e3d6f87f0bb13713c82b69f
         with:
           sarif_file: sarif-reports
 
